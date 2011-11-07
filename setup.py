@@ -3,15 +3,15 @@ import sys, os
 
 version = '0.1'
 
-setup(name='nsi.videoconvert',
+setup(name='nsi.cloudooomanager',
       version=version,
-      description="A package to convert any kind of video to ogg.",
+      description="A package to intercept all calls to an CloudOOO Server.",
       long_description="""\
 """,
       classifiers=[], # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
       keywords='',
-      author='Eduardo Braga',
-      author_email='ebfj8@gmail.com',
+      author='Douglas Camata',
+      author_email='d.camata@gmail.com',
       url='',
       license='GPL',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests']),
