@@ -7,9 +7,10 @@ import functools
 import cyclone.web
 from twisted.internet import defer
 from zope.interface import implements
-from nsivideoconvert.interfaces.http import IHttp
+from nsicloudooomanager.interfaces.http import IHttp
 from restfulie import Restfulie
 from celery.execute import send_task
+from urlparse import urlsplit
 
 def auth(method):
     @functools.wraps(method)
@@ -41,9 +42,13 @@ class HttpHandler(cyclone.web.RequestHandler):
     def _load_sam_config(self):
         self.sam_settings = {'url': self.settings.sam_url, 'auth': [self.settings.sam_user, self.settings.sam_pass]}
 
+    def _load_cloudooo_config(self):
+        self.cloudooo_settings = {'url':self.settings.cloudooo_url}
+
     def __init__(self, *args, **kwargs):
         cyclone.web.RequestHandler.__init__(self, *args, **kwargs)
         self._load_sam_config()
+        self._load_cloudooo_config()
         self.sam = Restfulie.at(self.sam_settings['url']).auth(*self.sam_settings['auth']).as_('application/json')
 
     @auth
@@ -53,7 +58,7 @@ class HttpHandler(cyclone.web.RequestHandler):
         uid = self._load_request_as_json().get('key')
         document = yield self.sam.get(key=uid).resource()
         self.set_header('Content-Type', 'application/json')
-        if hasattr(video.data, 'granulated') and not video.data.granulated:
+        if hasattr(document.data, 'granulated') and not document.data.granulated:
             self.finish(cyclone.web.escape.json_encode({'done':False}))
         else:
             self.finish(cyclone.web.escape.json_encode({'done':True}))
@@ -64,24 +69,26 @@ class HttpHandler(cyclone.web.RequestHandler):
     def post(self):
         request_as_json = self._load_request_as_json()
         callback_url = request_as_json.get('callback') or None
-        video_link = None
+        callback_verb = request_as_json.get('verb') or 'POST'
+        filename = request_as_json.get('filename') or urlsplit(request_as_json.get('doc_link')).path.split('/')[-1]
+        doc_link = None
 
-        if not request_as_json.get('video_link'):
-            video = request_as_json.get('video')
-            to_convert_video = {"video":video, "converted":False}
-            to_convert_uid = yield self._pre_store_in_sam(to_convert_video)
+        if not request_as_json.get('doc_link'):
+            doc = request_as_json.get('doc')
+            to_granulate_doc = {"doc":doc, "granulated":False}
+            to_granulate_uid = yield self._pre_store_in_sam(to_granulate_doc)
         else:
-            to_convert_uid = yield self._pre_store_in_sam({})
-            video_link = request_as_json.get('video_link')
+            to_granulate_uid = yield self._pre_store_in_sam({})
+            doc_link = request_as_json.get('doc_link')
 
-        response = self._enqueue_uid_to_convert(to_convert_uid, callback_url, video_link)
+        response = self._enqueue_uid_to_granulate(to_granulate_uid, filename, callback_url, callback_verb, doc_link)
         self.set_header('Content-Type', 'application/json')
-        self.finish(cyclone.web.escape.json_encode({'key':to_convert_uid}))
+        self.finish(cyclone.web.escape.json_encode({'key':to_granulate_uid}))
 
-    def _enqueue_uid_to_convert(self, uid, callback_url, video_link):
-        send_task('nsivideoconvert.tasks.VideoConversion', args=(uid, callback_url, video_link, self.sam_settings),
-                  queue='convert', routing_key='convert')
+    def _enqueue_uid_to_granulate(self, uid, filename, callback_url, callback_verb, doc_link):
+        send_task('nsicloudooomanager.tasks.GranulateDoc', args=(uid, filename, callback_url, callback_verb, doc_link, self.cloudooo_settings,
+                                                                self.sam_settings), queue='cloudooo', routing_key='cloudooo')
 
-    def _pre_store_in_sam(self, video):
-        return self.sam.put(value=video).resource().key
+    def _pre_store_in_sam(self, doc):
+        return self.sam.put(value=doc).resource().key
 
