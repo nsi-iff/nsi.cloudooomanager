@@ -1,6 +1,6 @@
 from os.path import exists
 from zope.interface import implements
-from nsivideoconvert.interfaces.auth import IAuth
+from nsicloudooomanager.interfaces.auth import IAuth
 import sqlite3
 
 class Authentication(object):
