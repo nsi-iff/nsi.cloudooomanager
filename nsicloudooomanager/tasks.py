@@ -4,84 +4,76 @@ from os import remove
 from os.path import exists
 from base64 import decodestring, b64encode
 from restfulie import Restfulie
-from nsi.multimedia.transform.ogg_converter import OggConverter
-from nsi.multimedia.utils import replace_file_extension
 from celery.task import task, Task
 from celery.execute import send_task
 
-class VideoException(Exception):
+from pickle import dumps
+
+from nsi.granulate.GranulateOffice import GranulateOffice
+from nsi.granulate.FileUtils import File
+
+
+class DocumentException(Exception):
     pass
 
-class VideoDownloadException(Exception):
+class DocumentDownloadException(DocumentException):
     pass
 
-class VideoConversion(Task):
+class GranulateDoc(Task):
 
-    def run(self, uid, callback_url, video_link, sam_settings):
+    def run(self, uid, filename, callback_url, callback_verb, doc_link, cloudooo_settings, sam_settings):
         self.callback_url = callback_url
+        self.callback_verb = callback_verb.lower()
+        self.cloudooo_settings = cloudooo_settings
         self.sam = Restfulie.at(sam_settings['url']).auth(*sam_settings['auth']).as_('application/json')
         self.destination_uid = uid
-        self.tmp_path = "/tmp/converted"
-        video_is_converted = False
+        self.filename = filename
+        doc_is_granulated = False
 
-        if video_link:
-            self._download_video(video_link)
+        if doc_link:
+            self._download_doc(doc_link)
         else:
             response = self._get_from_sam(uid)
-            self._original_video = response.data.video
-            video_is_converted = response.data.converted
+            self._original_doc = response.data.doc
+            doc_is_granulated = response.data.granulated
 
-        if not video_is_converted:
-            print "Conversion started."
-            self._process_video()
-            print "Conversion finished."
+        if not doc_is_granulated:
+            print "Granulation started."
+            self._process_doc()
+            print "Granulation finished."
             if not self.callback_url == None:
                 print "Callback task sent."
-                send_task('nsivideoconvert.tasks.Callback', args=(callback_url, self.destination_uid), queue='convert',
-                          routing_key='convert')
+                send_task('nsicloudooomanager.tasks.Callback', args=(callback_url, callback_verb, self.destination_uid), queue='cloudooo',
+                          routing_key='cloudooo')
             else:
                 print "No callback."
             return self.destination_uid
         else:
-            raise VideoException("Video already converted.")
+            raise DocumentException("Document already granulated.")
 
-    def _download_video(self, video_link):
+    def _download_doc(self, doc_link):
         try:
-            print "Downloading video from %s" % video_link
-            video = Restfulie.at(video_link).get().body
+            print "Downloading document from %s" % doc_link
+            document = Restfulie.at(doc_link).get().body
         except Exception:
-            raise VideoDownloadException("Could not download the video from %s" % video_link)
+            raise DocumentDownloadException("Could not download the document from %s" % video_link)
         else:
-            print "Video downloaded."
-        self._original_video = b64encode(video)
+            print "Document downloaded."
+        self._original_doc = b64encode(document)
 
-    def _process_video(self):
-        self._save_video_to_filesystem()
-        self._convert_video()
-        self._store_in_sam(self.destination_uid, self._converted_video)
+    def _process_doc(self):
+        self._granulate_doc()
+        self._store_in_sam(self.destination_uid, self._grains)
 
-    def _save_video_to_filesystem(self):
-        video = decodestring(self._original_video)
-        video_to_convert = open(self.tmp_path, 'w+')
-        video_to_convert.write(video)
-        video_to_convert.close()
+    def _granulate_doc(self):
+        doc = File(self.filename, decodestring(self._original_doc))
+        print self.cloudooo_settings['url']
+        granulate = GranulateOffice(doc, self.cloudooo_settings['url'])
+        grains = granulate.granulate()
+        encoded_images = [b64encode(dumps(image)) for image in grains['image_list']]
+        encoded_files = [b64encode(dumps(file_)) for file_ in grains['file_list']]
 
-    def _convert_video(self, destination=None):
-        try:
-            if not destination:
-                destination = (self.tmp_path + '.ogm')
-            converter = OggConverter(self.tmp_path, target=destination)
-            converter.run()
-            converted_video = open(destination or replace_file_extension(self.tmp_path, 'ogm')).read()
-        finally:
-            files_to_remove = [destination, replace_file_extension(self.tmp_path, 'ogm'), self.tmp_path]
-            for file_ in files_to_remove:
-                self._remove_if_exists(file_)
-            self._converted_video = b64encode(converted_video)
-
-    def _remove_if_exists(self, path):
-        if exists(path):
-            remove(path)
+        self._grains = {'images':encoded_images, 'files':encoded_files}
 
     def _get_from_sam(self, uid):
         return self.sam.get(key=uid).resource()
@@ -94,10 +86,11 @@ class Callback(Task):
 
     max_retries = 3
 
-    def run(self, url, video_uid, **kwargs):
+    def run(self, url, verb, video_uid, **kwargs):
         try:
             print "Sending callback to %s" % url
-            response = Restfulie.at(url).as_('application/json').post(key=video_uid, status='Done')
+            restfulie = Restfulie.at(url).as_('application/json')
+            response = getattr(restfulie, verb.lower())(key=video_uid, status='Done')
         except Exception, e:
             Callback.retry(exc=e, countdown=10)
         else:
