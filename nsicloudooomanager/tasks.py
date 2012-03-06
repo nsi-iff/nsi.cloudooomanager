@@ -70,8 +70,10 @@ class GranulateDoc(Task):
         print self.cloudooo_settings['url']
         granulate = GranulateOffice(doc, self.cloudooo_settings['url'])
         grains = granulate.granulate()
-        encoded_images = [b64encode(dumps(image)) for image in grains['image_list']]
-        encoded_files = [b64encode(dumps(file_)) for file_ in grains['file_list']]
+        if grains.has_key('image_list'):
+            encoded_images = [b64encode(dumps(image)) for image in grains['image_list']]
+        if grains.has_key('file_list'):
+            encoded_files = [b64encode(dumps(file_)) for file_ in grains['file_list']]
 
         self._grains = {'images':encoded_images, 'files':encoded_files}
 
