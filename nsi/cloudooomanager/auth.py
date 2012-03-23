@@ -1,6 +1,7 @@
 from os.path import exists
 from zope.interface import implements
 from nsicloudooomanager.interfaces.auth import IAuth
+from argparse import ArgumentParser
 import sqlite3
 
 class Authentication(object):
@@ -24,38 +25,57 @@ class Authentication(object):
        cursor.close()
        return dict_user
 
-    def add_user(self, user, password):
+    def add_user(self):
        connection = sqlite3.connect(self.db)
        cursor = connection.cursor()
        db_dict = self._load_db_as_dict()
        dict_user = {}
-       if db_dict.has_key(user):
+       parser = ArgumentParser()
+       parser.add_argument('--user', dest='user',
+                           help="Name for user")
+       parser.add_argument('--password', dest='password',
+                           help="Password for acess")
+       namespace = parser.parse_args()
+       if db_dict.has_key(namespace.user):
           return False
        else:
-          cursor.execute('''insert into clientes values(?, ?, ?, ?, ?)''', (None, None, None, user, password))
+          cursor.execute('''insert into clientes values(?, ?, ?, ?, ?)''', 
+              (None, None, None, namespace.user, namespace.password))
           connection.commit()
-          dict_user[user] = password
+          dict_user[namespace.user] = namespace.password
           cursor.close()
 
        return True
 
-    def del_user(self, user):
+    def del_user(self):
        connection = sqlite3.connect(self.db)
        cursor = connection.cursor()
        db_dict = self._load_db_as_dict()
-       if not db_dict.has_key(user):
+       parser = ArgumentParser()
+       parser.add_argument('--user', dest='user',
+                           help="Name for user")
+       parser.add_argument('--password', dest='password',
+                           help="Password for acess")
+       namespace = parser.parse_args()
+       if not db_dict.has_key(namespace.user):
           return False
        else:
-          cursor.execute('''delete from clientes where usuario = ?''', (user,))
+          cursor.execute('''delete from clientes where usuario = ?''', (namespace.user,))
           connection.commit()
           cursor.close()
        return True
 
     def authenticate(self, user, password):
         db_dict = self._load_db_as_dict()
-        if not db_dict.has_key(user):
+        parser = ArgumentParser()
+        parser.add_argument('--user', dest='user',
+                            help="Name for user")
+        parser.add_argument('--password', dest='password',
+                            help="Password for acess")
+        namespace = parser.parse_args()
+        if not db_dict.has_key(namespace.user):
           return False
-        elif db_dict[user] == password:
+        elif db_dict[namespace.user] == namespace.password:
           return True
         else:
           return False
