@@ -86,7 +86,7 @@ class HttpHandler(cyclone.web.RequestHandler):
         self.finish(cyclone.web.escape.json_encode({'key':to_granulate_uid}))
 
     def _enqueue_uid_to_granulate(self, uid, filename, callback_url, callback_verb, doc_link):
-        send_task('nsicloudooomanager.tasks.GranulateDoc', args=(uid, filename, callback_url, callback_verb, doc_link, self.cloudooo_settings,
+        send_task('nsi.cloudooomanager.tasks.GranulateDoc', args=(uid, filename, callback_url, callback_verb, doc_link, self.cloudooo_settings,
                                                                 self.sam_settings), queue='cloudooo', routing_key='cloudooo')
 
     def _pre_store_in_sam(self, doc):
