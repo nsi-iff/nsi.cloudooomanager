@@ -21,7 +21,8 @@ class DocumentDownloadException(DocumentException):
 
 class GranulateDoc(Task):
 
-    def run(self, uid, filename, callback_url, callback_verb, doc_link, cloudooo_settings, sam_settings):
+    def run(self, uid, filename, callback_url, callback_verb, doc_link,\
+                                            cloudooo_settings, sam_settings):
         self.callback_url = callback_url
         self.callback_verb = callback_verb.lower()
         self.cloudooo_settings = cloudooo_settings
@@ -43,8 +44,10 @@ class GranulateDoc(Task):
             print "Granulation finished."
             if not self.callback_url == None:
                 print "Callback task sent."
-                send_task('nsicloudooomanager.tasks.Callback', args=(callback_url, callback_verb, self.destination_uid), queue='cloudooo',
-                          routing_key='cloudooo')
+                send_task('nsi.cloudooomanager.tasks.Callback',
+                            args=(callback_url, callback_verb, self.destination_uid),
+                            queue='cloudooo',
+                            routing_key='cloudooo')
             else:
                 print "No callback."
             return self.destination_uid
