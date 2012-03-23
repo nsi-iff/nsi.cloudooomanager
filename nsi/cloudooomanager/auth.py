@@ -1,6 +1,6 @@
 from os.path import exists
 from zope.interface import implements
-from nsicloudooomanager.interfaces.auth import IAuth
+from nsi.cloudooomanager.interfaces.auth import IAuth
 from argparse import ArgumentParser
 import sqlite3
 

@@ -1,8 +1,8 @@
 import unittest
-from nsicloudooomanager.interfaces.auth import IAuth
-from nsicloudooomanager.interfaces.http import IHttp
-from nsicloudooomanager.auth import Authentication
-from nsicloudooomanager.http import HttpHandler
+from nsi.cloudooomanager.interfaces.auth import IAuth
+from nsi.cloudooomanager.interfaces.http import IHttp
+from nsi.cloudooomanager.auth import Authentication
+from nsi.cloudooomanager.http import HttpHandler
 
 class TestInterface(unittest.TestCase):
 

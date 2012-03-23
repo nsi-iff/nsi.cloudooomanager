@@ -7,7 +7,7 @@ import functools
 import cyclone.web
 from twisted.internet import defer
 from zope.interface import implements
-from nsicloudooomanager.interfaces.http import IHttp
+from nsi.cloudooomanager.interfaces.http import IHttp
 from restfulie import Restfulie
 from celery.execute import send_task
 from urlparse import urlsplit

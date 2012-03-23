@@ -1,6 +1,6 @@
 import unittest
 from os.path import abspath, dirname, join
-from nsicloudooomanager.auth import Authentication
+from nsi.cloudooomanager.auth import Authentication
 
 FOLDER_PATH = abspath(dirname(__file__))
 
