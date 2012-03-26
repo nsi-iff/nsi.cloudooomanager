@@ -55,6 +55,11 @@ class HttpHandler(cyclone.web.RequestHandler):
     @defer.inlineCallbacks
     @cyclone.web.asynchronous
     def get(self):
+        doc_key = self._load_request_as_json().get('doc_key')
+        if doc_key:
+            keys = yield self._get_grains_keys(doc_key)
+            self.set_header('Content-Type', 'application/json')
+            self.finish(cyclone.web.escape.json_encode(keys))
         uid = self._load_request_as_json().get('key')
         document = yield self.sam.get(key=uid).resource()
         self.set_header('Content-Type', 'application/json')
@@ -62,6 +67,14 @@ class HttpHandler(cyclone.web.RequestHandler):
             self.finish(cyclone.web.escape.json_encode({'done':False}))
         else:
             self.finish(cyclone.web.escape.json_encode({'done':True}))
+
+    def _get_grains_keys(self, doc_key):
+        document_uid = doc_key
+        sam_entry = loads(self.sam.get(key=document_uid).body)
+        grains = sam_entry['data']['grains_keys']
+        print grains
+        self.set_header('Content-Type', 'application/json')
+        self.finish(cyclone.web.escape.json_encode(grains))
 
     @auth
     @defer.inlineCallbacks
@@ -78,12 +91,12 @@ class HttpHandler(cyclone.web.RequestHandler):
             to_granulate_doc = {"doc":doc, "granulated":False}
             to_granulate_uid = yield self._pre_store_in_sam(to_granulate_doc)
         else:
-            to_granulate_uid = yield self._pre_store_in_sam({})
+            to_granulate_uid = yield self._pre_store_in_sam({"granulated":False})
             doc_link = request_as_json.get('doc_link')
 
         response = self._enqueue_uid_to_granulate(to_granulate_uid, filename, callback_url, callback_verb, doc_link)
         self.set_header('Content-Type', 'application/json')
-        self.finish(cyclone.web.escape.json_encode({'key':to_granulate_uid}))
+        self.finish(cyclone.web.escape.json_encode({'doc_key':to_granulate_uid}))
 
     def _enqueue_uid_to_granulate(self, uid, filename, callback_url, callback_verb, doc_link):
         send_task('nsicloudooomanager.tasks.GranulateDoc', args=(uid, filename, callback_url, callback_verb, doc_link, self.cloudooo_settings,
