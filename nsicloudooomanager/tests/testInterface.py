@@ -1,8 +1,8 @@
 import unittest
-from nsivideoconvert.interfaces.auth import IAuth
-from nsivideoconvert.interfaces.http import IHttp
-from nsivideoconvert.auth import Authentication
-from nsivideoconvert.http import HttpHandler
+from nsicloudooomanager.interfaces.auth import IAuth
+from nsicloudooomanager.interfaces.http import IHttp
+from nsicloudooomanager.auth import Authentication
+from nsicloudooomanager.http import HttpHandler
 
 class TestInterface(unittest.TestCase):
 
