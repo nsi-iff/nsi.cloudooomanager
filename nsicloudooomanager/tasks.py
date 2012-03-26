@@ -26,6 +26,7 @@ class GranulateDoc(Task):
         self.callback_verb = callback_verb.lower()
         self.cloudooo_settings = cloudooo_settings
         self.sam = Restfulie.at(sam_settings['url']).auth(*sam_settings['auth']).as_('application/json')
+        self._doc_uid = uid
         self.destination_uid = uid
         self.filename = filename
         doc_is_granulated = False
@@ -56,14 +57,16 @@ class GranulateDoc(Task):
             print "Downloading document from %s" % doc_link
             document = Restfulie.at(doc_link).get().body
         except Exception:
-            raise DocumentDownloadException("Could not download the document from %s" % video_link)
+            raise DocumentDownloadException("Could not download the document from %s" % doc_link)
         else:
             print "Document downloaded."
         self._original_doc = b64encode(document)
 
     def _process_doc(self):
         self._granulate_doc()
-        self._store_in_sam(self.destination_uid, self._grains)
+        keys = self._store_grains_in_sam(self._grains)
+        new_doc = {'doc':self._original_doc, 'granulated':True, 'grains_keys':keys}
+        self.sam.post(key=self._doc_uid, value=new_doc)
 
     def _granulate_doc(self):
         doc = File(self.filename, decodestring(self._original_doc))
@@ -78,8 +81,17 @@ class GranulateDoc(Task):
     def _get_from_sam(self, uid):
         return self.sam.get(key=uid).resource()
 
-    def _store_in_sam(self, uid, video):
-        return self.sam.post(key=uid, value=video).resource().key
+    def _store_grains_in_sam(self, grains):
+        keys = {'images':[], 'files':[]}
+        for grain in self._grains['images']:
+            grain_key = self.sam.put(value=grain).resource().key
+            keys['images'].append(grain_key)
+
+        for grain in self._grains['files']:
+            grain_key = self.sam.put(value=grain).resource().key
+            keys['files'].append(grain_key)
+
+        return keys
 
 
 class Callback(Task):
