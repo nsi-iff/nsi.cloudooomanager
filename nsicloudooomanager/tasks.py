@@ -44,8 +44,9 @@ class GranulateDoc(Task):
             print "Granulation finished."
             if not self.callback_url == None:
                 print "Callback task sent."
-                send_task('nsicloudooomanager.tasks.Callback', args=(callback_url, callback_verb, self.destination_uid), queue='cloudooo',
-                          routing_key='cloudooo')
+                send_task('nsicloudooomanager.tasks.Callback', args=(callback_url, callback_verb, self.destination_uid,
+                                                                     self._grains_keys),
+                                                              queue='cloudooo', routing_key='cloudooo')
             else:
                 print "No callback."
             return self.destination_uid
@@ -64,8 +65,8 @@ class GranulateDoc(Task):
 
     def _process_doc(self):
         self._granulate_doc()
-        keys = self._store_grains_in_sam(self._grains)
-        new_doc = {'doc':self._original_doc, 'granulated':True, 'grains_keys':keys}
+        self._grains_keys = self._store_grains_in_sam(self._grains)
+        new_doc = {'doc':self._original_doc, 'granulated':True, 'grains_keys':self._grains_keys}
         self.sam.post(key=self._doc_uid, value=new_doc)
 
     def _granulate_doc(self):
@@ -102,11 +103,11 @@ class Callback(Task):
 
     max_retries = 3
 
-    def run(self, url, verb, video_uid, **kwargs):
+    def run(self, url, verb, doc_uid, grains_keys, **kwargs):
         try:
             print "Sending callback to %s" % url
             restfulie = Restfulie.at(url).as_('application/json')
-            response = getattr(restfulie, verb.lower())(key=video_uid, status='Done')
+            response = getattr(restfulie, verb.lower())(doc_key=doc_uid, grains_keys=grains_keys, done=True)
         except Exception, e:
             Callback.retry(exc=e, countdown=10)
         else:
