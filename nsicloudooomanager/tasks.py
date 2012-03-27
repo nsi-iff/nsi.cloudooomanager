@@ -32,8 +32,10 @@ class GranulateDoc(Task):
         doc_is_granulated = False
 
         if doc_link:
+            # link to document
             self._download_doc(doc_link)
         else:
+            # sam uid that will be recovered to send to cloudooo
             response = self._get_from_sam(uid)
             self._original_doc = response.data.doc
             doc_is_granulated = response.data.granulated

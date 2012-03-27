@@ -29,7 +29,7 @@ def auth(method):
 class HttpHandler(cyclone.web.RequestHandler):
 
     implements(IHttp)
-    count = 0
+    no_keep_alive = True
 
     def _get_current_user(self):
         auth = self.request.headers.get("Authorization")
@@ -60,6 +60,7 @@ class HttpHandler(cyclone.web.RequestHandler):
             keys = yield self._get_grains_keys(doc_key)
             self.set_header('Content-Type', 'application/json')
             self.finish(cyclone.web.escape.json_encode(keys))
+            return
         uid = self._load_request_as_json().get('key')
         document = yield self.sam.get(key=uid).resource()
         self.set_header('Content-Type', 'application/json')
@@ -72,9 +73,7 @@ class HttpHandler(cyclone.web.RequestHandler):
         document_uid = doc_key
         sam_entry = loads(self.sam.get(key=document_uid).body)
         grains = sam_entry['data']['grains_keys']
-        print grains
-        self.set_header('Content-Type', 'application/json')
-        self.finish(cyclone.web.escape.json_encode(grains))
+        return grains
 
     @auth
     @defer.inlineCallbacks
