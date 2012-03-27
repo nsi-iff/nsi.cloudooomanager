@@ -31,8 +31,10 @@ class GranulateDoc(Task):
         doc_is_granulated = False
 
         if doc_link:
+            # link to document
             self._download_doc(doc_link)
         else:
+            # sam uid that will be recovered to send to cloudooo
             response = self._get_from_sam(uid)
             self._original_doc = response.data.doc
             doc_is_granulated = response.data.granulated
@@ -63,6 +65,11 @@ class GranulateDoc(Task):
 
     def _process_doc(self):
         self._granulate_doc()
+        # here : create a dictionary 
+        # iterate grains
+        #     send to sam each grain
+        #     self.sam.put(value=doc).resource().key
+        #     keep sam grain id 
         self._store_in_sam(self.destination_uid, self._grains)
 
     def _granulate_doc(self):
