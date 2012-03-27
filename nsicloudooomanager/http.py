@@ -86,11 +86,13 @@ class HttpHandler(cyclone.web.RequestHandler):
         filename = request_as_json.get('filename') or urlsplit(request_as_json.get('doc_link')).path.split('/')[-1]
         doc_link = None
 
-        if not request_as_json.get('doc_link'):
+        if request_as_json.get('doc'):
             doc = request_as_json.get('doc')
             to_granulate_doc = {"doc":doc, "granulated":False}
             to_granulate_uid = yield self._pre_store_in_sam(to_granulate_doc)
-        else:
+        elif request_as_json.get('sam_uid'):
+            to_granulate_uid = yield request_as_json.get('sam_uid')
+        elif request_as_json.get('doc_link'):
             to_granulate_uid = yield self._pre_store_in_sam({"granulated":False})
             doc_link = request_as_json.get('doc_link')
 
