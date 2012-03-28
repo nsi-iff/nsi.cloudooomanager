@@ -4,7 +4,7 @@ from os import remove
 from os.path import exists
 from base64 import decodestring, b64encode
 from restfulie import Restfulie
-from celery.task import task, Task
+from celery.task import Task
 from celery.execute import send_task
 
 from pickle import dumps
@@ -22,13 +22,13 @@ class DocumentDownloadException(DocumentException):
 class GranulateDoc(Task):
 
     def run(self, uid, filename, callback_url, callback_verb, doc_link, cloudooo_settings, sam_settings):
-        self.callback_url = callback_url
-        self.callback_verb = callback_verb.lower()
-        self.cloudooo_settings = cloudooo_settings
-        self.sam = Restfulie.at(sam_settings['url']).auth(*sam_settings['auth']).as_('application/json')
+        self._logger = GranulateDoc.get_logger()
+        self._callback_url = callback_url
+        self._callback_verb = callback_verb.lower()
+        self._cloudooo_settings = cloudooo_settings
+        self._sam = Restfulie.at(sam_settings['url']).auth(*sam_settings['auth']).as_('application/json')
         self._doc_uid = uid
-        self.destination_uid = uid
-        self.filename = filename
+        self._filename = filename
         doc_is_granulated = False
 
         if doc_link:
@@ -44,14 +44,14 @@ class GranulateDoc(Task):
             print "Granulation started."
             self._process_doc()
             print "Granulation finished."
-            if not self.callback_url == None:
+            if not self._callback_url == None:
                 print "Callback task sent."
-                send_task('nsicloudooomanager.tasks.Callback', args=(callback_url, callback_verb, self.destination_uid,
-                                                                     self._grains_keys),
-                                                              queue='cloudooo', routing_key='cloudooo')
+                send_task('nsicloudooomanager.tasks.Callback',
+                          args=(callback_url, callback_verb, self._doc_uid, self._grains_keys),
+                          queue='cloudooo', routing_key='cloudooo')
             else:
                 print "No callback."
-            return self.destination_uid
+            return self._doc_uid
         else:
             raise DocumentException("Document already granulated.")
 
@@ -67,38 +67,34 @@ class GranulateDoc(Task):
 
     def _process_doc(self):
         self._granulate_doc()
-        self._grains_keys = self._store_grains_in_sam(self._grains)
         new_doc = {'doc':self._original_doc, 'granulated':True, 'grains_keys':self._grains_keys}
-        self.sam.post(key=self._doc_uid, value=new_doc)
+        self._sam.post(key=self._doc_uid, value=new_doc)
 
     def _granulate_doc(self):
-        doc = File(self.filename, decodestring(self._original_doc))
-        print self.cloudooo_settings['url']
-        granulate = GranulateOffice(doc, self.cloudooo_settings['url'])
+        doc = File(self._filename, decodestring(self._original_doc))
+        print "CloudOOO server: %s" % self._cloudooo_settings['url']
+        granulate = GranulateOffice(doc, self._cloudooo_settings['url'])
         grains = granulate.granulate()
+        grains_keys = {'images':[], 'files':[]}
         encoded_images = []
         encoded_files = []
         if grains.has_key('image_list'):
-            encoded_images = [b64encode(dumps(image)) for image in grains['image_list']]
+            for image in grains['image_list']:
+                encoded_image = b64encode(image.getContent().getvalue())
+                image_key = self._sam.put(value=encoded_image).resource().key
+                grains_keys['images'].append(image_key)
         if grains.has_key('file_list'):
-            encoded_files = [b64encode(dumps(file_)) for file_ in grains['file_list']]
-
-        self._grains = {'images':encoded_images, 'files':encoded_files}
+            for file_ in grains['file_list']:
+                encoded_file = b64encode(file_.getContent().getvalue())
+                file_key = self._sam.put(value=encoded_file).resource().key
+                grains_keys['files'].append(file_key)
+        print "Document granulated into %d image(s) and %d file(s)." % \
+              (len(grains_keys['images']), len(grains_keys['files']))
+        self._grains_keys = grains_keys
+        del grains
 
     def _get_from_sam(self, uid):
-        return self.sam.get(key=uid).resource()
-
-    def _store_grains_in_sam(self, grains):
-        keys = {'images':[], 'files':[]}
-        for grain in self._grains['images']:
-            grain_key = self.sam.put(value=grain).resource().key
-            keys['images'].append(grain_key)
-
-        for grain in self._grains['files']:
-            grain_key = self.sam.put(value=grain).resource().key
-            keys['files'].append(grain_key)
-
-        return keys
+        return self._sam.get(key=uid).resource()
 
 
 class Callback(Task):
