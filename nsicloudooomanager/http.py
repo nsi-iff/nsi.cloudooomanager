@@ -64,10 +64,10 @@ class HttpHandler(cyclone.web.RequestHandler):
         uid = self._load_request_as_json().get('key')
         document = yield self.sam.get(key=uid).resource()
         self.set_header('Content-Type', 'application/json')
-        if hasattr(document.data, 'granulated') and not document.data.granulated:
-            self.finish(cyclone.web.escape.json_encode({'done':False}))
-        else:
+        if hasattr(document.data, 'granulated') and document.data.granulated:
             self.finish(cyclone.web.escape.json_encode({'done':True}))
+        else:
+            self.finish(cyclone.web.escape.json_encode({'done':False}))
 
     def _get_grains_keys(self, doc_key):
         document_uid = doc_key
