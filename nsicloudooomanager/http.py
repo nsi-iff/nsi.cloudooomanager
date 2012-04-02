@@ -62,7 +62,14 @@ class HttpHandler(cyclone.web.RequestHandler):
             self.finish(cyclone.web.escape.json_encode(keys))
             return
         uid = self._load_request_as_json().get('key')
-        document = yield self.sam.get(key=uid).resource()
+        response = yield self.sam.get(key=uid)
+        if response.code == '404':
+            raise cyclone.web.HTTPError(404, 'Key not found in SAM.')
+        elif response.code == '401':
+            raise cyclone.web.HTTPError(401, 'SAM user and password not match.')
+        elif response.code == '500':
+            raise cyclone.web.HTTPError(500, 'Error while connecting to SAM.')
+        document = response.resource()
         self.set_header('Content-Type', 'application/json')
         if hasattr(document.data, 'granulated') and document.data.granulated:
             self.finish(cyclone.web.escape.json_encode({'done':True}))
@@ -104,5 +111,12 @@ class HttpHandler(cyclone.web.RequestHandler):
                                                                 self.sam_settings), queue='cloudooo', routing_key='cloudooo')
 
     def _pre_store_in_sam(self, doc):
+        response = self.sam.put(value=doc)
+        if response.code == '500':
+            return cyclone.web.HTTPError(500, 'Error while connecting to SAM.')
+        elif response.code == '404':
+            return cyclone.web.HTTPError(404, 'Key not found in SAM.' )
+        elif response.code == '401':
+            return cyclone.web.HTTPError(401, 'SAM user and password not match.')
         return self.sam.put(value=doc).resource().key
 
