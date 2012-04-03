@@ -62,6 +62,8 @@ class HttpHandler(cyclone.web.RequestHandler):
             self.finish(cyclone.web.escape.json_encode(keys))
             return
         uid = self._load_request_as_json().get('key')
+        if not uid:
+            raise cyclone.web.HTTPError(400, 'Malformed request.')
         response = yield self.sam.get(key=uid)
         if response.code == '404':
             raise cyclone.web.HTTPError(404, 'Key not found in SAM.')
@@ -78,7 +80,10 @@ class HttpHandler(cyclone.web.RequestHandler):
 
     def _get_grains_keys(self, doc_key):
         document_uid = doc_key
-        sam_entry = loads(self.sam.get(key=document_uid).body)
+        response = self.sam.get(key=document_uid)
+        if response.code == '404':
+            raise cyclone.web.HTTPError(404, 'Key not found in SAM.')
+        sam_entry = loads(response.body)
         grains = sam_entry['data']['grains_keys']
         return grains
 
@@ -89,6 +94,8 @@ class HttpHandler(cyclone.web.RequestHandler):
         request_as_json = self._load_request_as_json()
         callback_url = request_as_json.get('callback') or None
         callback_verb = request_as_json.get('verb') or 'POST'
+        if not request_as_json.get('filename') and not request_as_json.get('doc_link'):
+            raise cyclone.web.HTTPError(400, 'Malformed request.')
         filename = request_as_json.get('filename') or urlsplit(request_as_json.get('doc_link')).path.split('/')[-1]
         doc_link = None
 
@@ -98,10 +105,14 @@ class HttpHandler(cyclone.web.RequestHandler):
             to_granulate_uid = yield self._pre_store_in_sam(to_granulate_doc)
         elif request_as_json.get('sam_uid'):
             to_granulate_uid = yield request_as_json.get('sam_uid')
+            response = self.sam.get(key=to_granulate_uid)
+            if response.code == '404':
+                raise cyclone.web.HTTPError(404, 'Key not found at SAM.')
         elif request_as_json.get('doc_link'):
             to_granulate_uid = yield self._pre_store_in_sam({"granulated":False})
             doc_link = request_as_json.get('doc_link')
-
+        else:
+            raise cyclone.web.HTTPError(400, 'Malformed request.')
         response = self._enqueue_uid_to_granulate(to_granulate_uid, filename, callback_url, callback_verb, doc_link)
         self.set_header('Content-Type', 'application/json')
         self.finish(cyclone.web.escape.json_encode({'doc_key':to_granulate_uid}))
@@ -113,10 +124,10 @@ class HttpHandler(cyclone.web.RequestHandler):
     def _pre_store_in_sam(self, doc):
         response = self.sam.put(value=doc)
         if response.code == '500':
-            return cyclone.web.HTTPError(500, 'Error while connecting to SAM.')
+            raise cyclone.web.HTTPError(500, 'Error while connecting to SAM.')
         elif response.code == '404':
-            return cyclone.web.HTTPError(404, 'Key not found in SAM.' )
+            raise cyclone.web.HTTPError(404, 'Key not found in SAM.' )
         elif response.code == '401':
-            return cyclone.web.HTTPError(401, 'SAM user and password not match.')
+            raise cyclone.web.HTTPError(401, 'SAM user and password not match.')
         return self.sam.put(value=doc).resource().key
 
