@@ -6,6 +6,7 @@ from base64 import decodestring, b64encode
 import functools
 import cyclone.web
 from twisted.internet import defer
+from twisted.python import log
 from zope.interface import implements
 from nsicloudooomanager.interfaces.http import IHttp
 from restfulie import Restfulie
@@ -21,6 +22,8 @@ def auth(method):
         user, password = decodestring(auth_data).split(":")
         # authentication itself
         if not self.settings.auth.authenticate(user, password):
+            log.msg("Authentication failed.")
+            log.msg("User '%s' and password '%s' not known." % (user, password))
             raise cyclone.web.HTTPError(401, "Unauthorized")
         return method(self, *args, **kwargs)
     return wrapper
@@ -59,29 +62,42 @@ class HttpHandler(cyclone.web.RequestHandler):
         if doc_key:
             keys = yield self._get_grains_keys(doc_key)
             self.set_header('Content-Type', 'application/json')
+            log.msg("Found the grains keys for the document with key: %s" % doc_key)
             self.finish(cyclone.web.escape.json_encode(keys))
             return
         uid = self._load_request_as_json().get('key')
         if not uid:
+            log.msg("GET failed.")
+            log.msg("Request didn't have a key to check.")
             raise cyclone.web.HTTPError(400, 'Malformed request.')
         response = yield self.sam.get(key=uid)
         if response.code == '404':
+            log.msg("GET failed!")
+            log.msg("Couldn't find any value for the key: %s" % key)
             raise cyclone.web.HTTPError(404, 'Key not found in SAM.')
         elif response.code == '401':
+            log.msg("GET failed!")
+            log.msg("Couldn't authenticate with SAM.")
             raise cyclone.web.HTTPError(401, 'SAM user and password not match.')
         elif response.code == '500':
+            log.msg("GET failed!")
+            log.msg("Couldn't connecting to SAM.")
             raise cyclone.web.HTTPError(500, 'Error while connecting to SAM.')
         document = response.resource()
         self.set_header('Content-Type', 'application/json')
         if hasattr(document.data, 'granulated') and document.data.granulated:
+            log.msg('Document with key %s is done.' % uid)
             self.finish(cyclone.web.escape.json_encode({'done':True}))
         else:
+            log.msg('Document with key %s isnt done.' % uid)
             self.finish(cyclone.web.escape.json_encode({'done':False}))
 
     def _get_grains_keys(self, doc_key):
         document_uid = doc_key
         response = self.sam.get(key=document_uid)
         if response.code == '404':
+            log.msg("GET failed!")
+            log.msg("Couldn't find any value for the key: %s" % key)
             raise cyclone.web.HTTPError(404, 'Key not found in SAM.')
         sam_entry = loads(response.body)
         grains = sam_entry['data']['grains_keys']
@@ -95,6 +111,8 @@ class HttpHandler(cyclone.web.RequestHandler):
         callback_url = request_as_json.get('callback') or None
         callback_verb = request_as_json.get('verb') or 'POST'
         if not request_as_json.get('filename') and not request_as_json.get('doc_link'):
+            log.msg("POST failed.")
+            log.msg("Either filename or doc_link weren't provided.")
             raise cyclone.web.HTTPError(400, 'Malformed request.')
         filename = request_as_json.get('filename') or urlsplit(request_as_json.get('doc_link')).path.split('/')[-1]
         doc_link = None
@@ -103,18 +121,26 @@ class HttpHandler(cyclone.web.RequestHandler):
             doc = request_as_json.get('doc')
             to_granulate_doc = {"doc":doc, "granulated":False}
             to_granulate_uid = yield self._pre_store_in_sam(to_granulate_doc)
+            log.msg("Granulating a doc...")
         elif request_as_json.get('sam_uid'):
             to_granulate_uid = yield request_as_json.get('sam_uid')
             response = self.sam.get(key=to_granulate_uid)
             if response.code == '404':
+                log.msg("POST failed!")
+                log.msg("Couldn't find the key: %s" % to_granulate_uid)
                 raise cyclone.web.HTTPError(404, 'Key not found at SAM.')
+            log.msg("Granulating from a SAM key...")
         elif request_as_json.get('doc_link'):
             to_granulate_uid = yield self._pre_store_in_sam({"granulated":False})
             doc_link = request_as_json.get('doc_link')
+            log.msg("Granulating from web...")
         else:
+            log.msg("POST failed!")
+            log.msg("Either 'doc', 'sam_uid' or 'doc_link' weren't provided")
             raise cyclone.web.HTTPError(400, 'Malformed request.')
         response = self._enqueue_uid_to_granulate(to_granulate_uid, filename, callback_url, callback_verb, doc_link)
         self.set_header('Content-Type', 'application/json')
+        log.msg("Document sent to the granulation queue.")
         self.finish(cyclone.web.escape.json_encode({'doc_key':to_granulate_uid}))
 
     def _enqueue_uid_to_granulate(self, uid, filename, callback_url, callback_verb, doc_link):
@@ -124,10 +150,16 @@ class HttpHandler(cyclone.web.RequestHandler):
     def _pre_store_in_sam(self, doc):
         response = self.sam.put(value=doc)
         if response.code == '500':
+            log.msg("POST failed.")
+            log.msg("Error while connecting to SAM.")
             raise cyclone.web.HTTPError(500, 'Error while connecting to SAM.')
         elif response.code == '404':
+            log.msg("POST failed.")
+            log.msg("Couldn't find any value for the key: %s" % key)
             raise cyclone.web.HTTPError(404, 'Key not found in SAM.' )
         elif response.code == '401':
+            log.msg("POST failed.")
+            log.msg("SAM user and password didn't match.")
             raise cyclone.web.HTTPError(401, 'SAM user and password not match.')
         return self.sam.put(value=doc).resource().key
 
