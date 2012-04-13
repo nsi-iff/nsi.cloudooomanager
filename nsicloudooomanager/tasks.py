@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
+import sys
+import traceback
 from os import remove
 from os.path import exists
 from base64 import decodestring, b64encode
@@ -41,17 +43,28 @@ class GranulateDoc(Task):
             doc_is_granulated = response.data.granulated
 
         if not doc_is_granulated:
-            print "Granulation started."
-            self._process_doc()
-            print "Granulation finished."
-            if not self._callback_url == None:
-                print "Callback task sent."
-                send_task('nsicloudooomanager.tasks.Callback',
-                          args=(callback_url, callback_verb, self._doc_uid, self._grains_keys),
+            try:
+                print "Granulation started."
+                self._process_doc()
+                print "Granulation finished."
+            except Exception, e:
+                print "Error in the granulation."
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                traceback.print_exception(exc_type, exc_value, exc_traceback,
+                              limit=4, file=sys.stdout)
+                print "Fail callback task sent."
+                send_task('nsicloudooomanager.tasks.FailCallback',
+                          args=(callback_url, callback_verb, self._doc_uid),
                           queue='cloudooo', routing_key='cloudooo')
             else:
-                print "No callback."
-            return self._doc_uid
+                if not self._callback_url == None:
+                    print "Callback task sent."
+                    send_task('nsicloudooomanager.tasks.Callback',
+                              args=(callback_url, callback_verb, self._doc_uid, self._grains_keys),
+                              queue='cloudooo', routing_key='cloudooo')
+                else:
+                    print "No callback."
+                return self._doc_uid
         else:
             raise DocumentException("Document already granulated.")
 
@@ -112,3 +125,15 @@ class Callback(Task):
             print "Callback executed."
             print "Response code: %s" % response.code
 
+class FailCallback(Callback):
+
+    def run(self, url, verb, doc_uid, **kwargs):
+        try:
+            print "Sending fail callback to %s" % url
+            restfulie = Restfulie.at(url).as_('application/json')
+            response = getattr(restfulie, verb.lower())(doc_key=doc_uid, done=False, error=True)
+        except Exception, e:
+            FailCallback.retry(exc=e, countdown=10)
+        else:
+            print "Fail Callback executed."
+            print "Response code: %s" % response.code
