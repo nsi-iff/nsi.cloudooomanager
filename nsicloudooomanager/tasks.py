@@ -10,6 +10,7 @@ from celery.task import Task
 from celery.execute import send_task
 
 from pickle import dumps
+from json import loads
 
 from nsi.granulate.GranulateOffice import GranulateOffice
 from nsi.granulate.FileUtils import File
@@ -38,9 +39,9 @@ class GranulateDoc(Task):
             self._download_doc(doc_link)
         else:
             # sam uid that will be recovered to send to cloudooo
-            response = self._get_from_sam(uid)
-            self._original_doc = response.data.doc
-            doc_is_granulated = response.data.granulated
+            response = loads(self._get_from_sam(uid).body)
+            self._original_doc = response["data"]["doc"]
+            doc_is_granulated = response.get('data').get('granulated')
 
         if not doc_is_granulated:
             try:
@@ -107,7 +108,7 @@ class GranulateDoc(Task):
         del grains
 
     def _get_from_sam(self, uid):
-        return self._sam.get(key=uid).resource()
+        return self._sam.get(key=uid)
 
 
 class Callback(Task):
