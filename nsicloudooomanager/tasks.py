@@ -101,7 +101,7 @@ class GranulateDoc(Task):
         if grains.has_key('file_list'):
             for file_ in grains['file_list']:
                 encoded_file = b64encode(file_.getContent().getvalue())
-                file_row = {'file': encoded_file}
+                file_row = {'file': encoded_file, 'filename': file_.getId()}
                 file_key = self._sam.put(value=file_row).resource().key
                 grains_keys['files'].append(file_key)
         print "Document granulated into %d image(s) and %d file(s)." % \
