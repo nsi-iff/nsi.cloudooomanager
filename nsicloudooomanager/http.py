@@ -144,8 +144,13 @@ class HttpHandler(cyclone.web.RequestHandler):
         self.finish(cyclone.web.escape.json_encode({'doc_key':to_granulate_uid}))
 
     def _enqueue_uid_to_granulate(self, uid, filename, callback_url, callback_verb, doc_link):
-        send_task('nsicloudooomanager.tasks.GranulateDoc', args=(uid, filename, callback_url, callback_verb, doc_link, self.cloudooo_settings,
-                                                                self.sam_settings), queue='cloudooo', routing_key='cloudooo')
+        try:
+            send_task('nsicloudooomanager.tasks.GranulateDoc', args=(uid, filename, callback_url, callback_verb, doc_link, self.cloudooo_settings,
+                                                                     self.sam_settings), queue='cloudooo', routing_key='cloudooo')
+        except:
+            log.msg('POST failed!')
+            log.msg("Couldn't conncet to the queue service.")
+            raise cyclone.web.HTTPError(503, 'Queue service unavailable')
 
     def _pre_store_in_sam(self, doc):
         response = self.sam.put(value=doc)
