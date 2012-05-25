@@ -38,7 +38,7 @@ class GranulateDoc(Task):
             # link to document
             self._download_doc(doc_link)
         else:
-            # sam uid that will be recovered to send to cloudooo
+            # when the worker receives a SAM uid
             response = loads(self._get_from_sam(uid).body)
             self._original_doc = response["data"]["doc"]
             doc_is_granulated = response.get('data').get('granulated')
@@ -53,21 +53,27 @@ class GranulateDoc(Task):
                 exc_type, exc_value, exc_traceback = sys.exc_info()
                 traceback.print_exception(exc_type, exc_value, exc_traceback,
                               limit=4, file=sys.stdout)
-                print "Fail callback task sent."
-                send_task('nsicloudooomanager.tasks.FailCallback',
-                          args=(callback_url, callback_verb, self._doc_uid),
-                          queue='cloudooo', routing_key='cloudooo')
+                self._send_fail_callback_task()
             else:
                 if not self._callback_url == None:
-                    print "Callback task sent."
-                    send_task('nsicloudooomanager.tasks.Callback',
-                              args=(callback_url, callback_verb, self._doc_uid, self._grains_keys),
-                              queue='cloudooo', routing_key='cloudooo')
+                    self._send_callback_task()
                 else:
                     print "No callback."
                 return self._doc_uid
         else:
             raise DocumentException("Document already granulated.")
+
+    def _send_callback_task(self):
+        send_task('nsicloudooomanager.tasks.Callback',
+                  args=(self._callback_url, self._callback_verb, self._doc_uid, self._grains_keys),
+                  queue='cloudooo', routing_key='cloudooo')
+        print "Callback task sent."
+
+    def _send_fail_callback_task(self):
+        send_task('nsicloudooomanager.tasks.FailCallback',
+                  args=(self._callback_url, self._callback_verb, self._doc_uid),
+                  queue='cloudooo', routing_key='cloudooo')
+        print "Fail callback task sent."
 
     def _download_doc(self, doc_link):
         try:
