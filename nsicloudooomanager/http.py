@@ -52,6 +52,7 @@ class HttpHandler(cyclone.web.RequestHandler):
         cyclone.web.RequestHandler.__init__(self, *args, **kwargs)
         self._load_sam_config()
         self._load_cloudooo_config()
+        self._task_queue = self.settings.task_queue
         self.sam = Restfulie.at(self.sam_settings['url']).auth(*self.sam_settings['auth']).as_('application/json')
 
     @auth
@@ -59,12 +60,13 @@ class HttpHandler(cyclone.web.RequestHandler):
     @cyclone.web.asynchronous
     def get(self):
         doc_key = self._load_request_as_json().get('doc_key')
-        if doc_key:
+        if doc_key: # find the grains keys for the document at 'doc_key'
             keys = yield self._get_grains_keys(doc_key)
             self.set_header('Content-Type', 'application/json')
             log.msg("Found the grains keys for the document with key: %s" % doc_key)
             self.finish(cyclone.web.escape.json_encode(keys))
             return
+
         uid = self._load_request_as_json().get('key')
         if not uid:
             log.msg("GET failed.")
@@ -145,8 +147,11 @@ class HttpHandler(cyclone.web.RequestHandler):
 
     def _enqueue_uid_to_granulate(self, uid, filename, callback_url, callback_verb, doc_link):
         try:
-            send_task('nsicloudooomanager.tasks.GranulateDoc', args=(uid, filename, callback_url, callback_verb, doc_link, self.cloudooo_settings,
-                                                                     self.sam_settings), queue='cloudooo', routing_key='cloudooo')
+            send_task('nsicloudooomanager.tasks.GranulateDoc', args=(uid, filename, callback_url, callback_verb,
+                                                                     doc_link, self.cloudooo_settings,
+                                                                     self.sam_settings),
+                                                               queue=self._task_queue,
+                                                               routing_key=self._task_queue)
         except:
             log.msg('POST failed!')
             log.msg("Couldn't conncet to the queue service.")
