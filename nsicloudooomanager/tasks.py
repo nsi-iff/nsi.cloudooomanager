@@ -41,12 +41,18 @@ class GranulateDoc(Task):
             # when the worker receives a SAM uid
             response = loads(self._get_from_sam(uid).body)
             self._original_doc = response["data"]["doc"]
+            self._old_data = response["data"]
+            if self._old_data.has_key("granulated"):
+                del self._old_data["granulated"]
             doc_is_granulated = response.get('data').get('granulated')
 
         if not doc_is_granulated:
             try:
                 print "Granulation started."
                 self._process_doc()
+                del self._original_doc
+                if hasattr(self, '_old_data'):
+                    del self._old_data
                 print "Granulation finished."
             except Exception, e:
                 print "Error in the granulation."
@@ -87,7 +93,9 @@ class GranulateDoc(Task):
 
     def _process_doc(self):
         self._granulate_doc()
-        new_doc = {'doc':self._original_doc, 'granulated':True, 'grains_keys':self._grains_keys}
+        new_doc = {'doc': self._original_doc, 'granulated':True, 'grains_keys':self._grains_keys}
+        if hasattr(self, '_old_data'):
+            new_doc.update(self._old_data)
         self._sam.post(key=self._doc_uid, value=new_doc)
 
     def _granulate_doc(self):
