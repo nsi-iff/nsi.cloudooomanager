@@ -103,6 +103,7 @@ class HttpHandler(cyclone.web.RequestHandler):
             raise cyclone.web.HTTPError(404, 'Key not found in SAM.')
         sam_entry = loads(response.body)
         grains = sam_entry['data']['grains_keys']
+        grains['thumbnail'] = sam_entry['data']['thumbnail_key']
         return grains
 
     @auth
