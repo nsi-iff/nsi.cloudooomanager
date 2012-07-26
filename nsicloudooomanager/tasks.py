@@ -32,6 +32,7 @@ class GranulateDoc(Task):
         self._sam = Restfulie.at(sam_settings['url']).auth(*sam_settings['auth']).as_('application/json')
         self._doc_uid = uid
         self._filename = filename
+        # self._thumbnail_key = None
         doc_is_granulated = False
 
         if doc_link:
@@ -93,7 +94,10 @@ class GranulateDoc(Task):
 
     def _process_doc(self):
         self._granulate_doc()
-        new_doc = {'doc': self._original_doc, 'granulated':True, 'grains_keys':self._grains_keys}
+        new_doc = {
+                    'doc': self._original_doc, 'granulated':True, 'grains_keys':self._grains_keys, 
+                    'thumbnail_key':self._thumbnail_key
+                  }
         if hasattr(self, '_old_data'):
             new_doc.update(self._old_data)
         self._sam.post(key=self._doc_uid, value=new_doc)
@@ -106,6 +110,7 @@ class GranulateDoc(Task):
         grains_keys = {'images':[], 'files':[]}
         encoded_images = []
         encoded_files = []
+        print grains.keys()
         if grains.has_key('image_list'):
             for image in grains['image_list']:
                 encoded_image = b64encode(image.getContent().getvalue())
@@ -118,6 +123,11 @@ class GranulateDoc(Task):
                 file_row = {'file': encoded_file, 'filename': file_.getId()}
                 file_key = self._sam.put(value=file_row).resource().key
                 grains_keys['files'].append(file_key)
+        if grains.has_key('thumbnail'):
+            encoded_thumbnail = b64encode(grains['thumbnail'].getvalue())
+            thumbnail_row = {'file': encoded_thumbnail}
+            thumbnail_key = self._sam.put(value=thumbnail_row).resource().key
+            self._thumbnail_key = thumbnail_key
         print "Document granulated into %d image(s) and %d file(s)." % \
               (len(grains_keys['images']), len(grains_keys['files']))
         self._grains_keys = grains_keys
