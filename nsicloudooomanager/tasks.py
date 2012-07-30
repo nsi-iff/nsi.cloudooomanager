@@ -72,7 +72,7 @@ class GranulateDoc(Task):
 
     def _send_callback_task(self):
         send_task('nsicloudooomanager.tasks.Callback',
-                  args=(self._callback_url, self._callback_verb, self._doc_uid, self._grains_keys),
+                  args=(self._callback_url, self._callback_verb, self._doc_uid, self._grains_keys, self._thumbnail_key),
                   queue='cloudooo', routing_key='cloudooo')
         print "Callback task sent."
 
@@ -141,11 +141,12 @@ class Callback(Task):
 
     max_retries = 3
 
-    def run(self, url, verb, doc_uid, grains_keys, **kwargs):
+    def run(self, url, verb, doc_uid, grains_keys, thumbnail_key, **kwargs):
         try:
             print "Sending callback to %s" % url
             restfulie = Restfulie.at(url).as_('application/json')
-            response = getattr(restfulie, verb.lower())(doc_key=doc_uid, grains_keys=grains_keys, done=True)
+            response = getattr(restfulie, verb.lower())(doc_key=doc_uid, grains_keys=grains_keys, 
+                                                        thumbnail_key=thumbnail_key, done=True)
         except Exception, e:
             Callback.retry(exc=e, countdown=10)
         else:
