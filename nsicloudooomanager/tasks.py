@@ -24,7 +24,7 @@ class DocumentDownloadException(DocumentException):
 
 class GranulateDoc(Task):
 
-    def run(self, uid, filename, callback_url, callback_verb, doc_link, cloudooo_settings, sam_settings):
+    def run(self, task_queue, uid, filename, callback_url, callback_verb, doc_link, cloudooo_settings, sam_settings):
         self._logger = GranulateDoc.get_logger()
         self._callback_url = callback_url
         self._callback_verb = callback_verb.lower()
@@ -32,6 +32,7 @@ class GranulateDoc(Task):
         self._sam = Restfulie.at(sam_settings['url']).auth(*sam_settings['auth']).as_('application/json')
         self._doc_uid = uid
         self._filename = filename
+        self._task_queue = task_queue
         # self._thumbnail_key = None
         doc_is_granulated = False
 
@@ -79,7 +80,7 @@ class GranulateDoc(Task):
     def _send_fail_callback_task(self):
         send_task('nsicloudooomanager.tasks.FailCallback',
                   args=(self._callback_url, self._callback_verb, self._doc_uid),
-                  queue='cloudooo', routing_key='cloudooo')
+                  queue=self._task_queue, routing_key=self._task_queue)
         print "Fail callback task sent."
 
     def _download_doc(self, doc_link):

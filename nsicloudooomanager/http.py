@@ -148,8 +148,8 @@ class HttpHandler(cyclone.web.RequestHandler):
 
     def _enqueue_uid_to_granulate(self, uid, filename, callback_url, callback_verb, doc_link):
         try:
-            send_task('nsicloudooomanager.tasks.GranulateDoc', args=(uid, filename, callback_url, callback_verb,
-                                                                     doc_link, self.cloudooo_settings,
+            send_task('nsicloudooomanager.tasks.GranulateDoc', args=(self._task_queue, uid, filename, callback_url, 
+                                                                     callback_verb, doc_link, self.cloudooo_settings,
                                                                      self.sam_settings),
                                                                queue=self._task_queue,
                                                                routing_key=self._task_queue)
