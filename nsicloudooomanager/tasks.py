@@ -74,7 +74,7 @@ class GranulateDoc(Task):
     def _send_callback_task(self):
         send_task('nsicloudooomanager.tasks.Callback',
                   args=(self._callback_url, self._callback_verb, self._doc_uid, self._grains_keys, self._thumbnail_key),
-                  queue='cloudooo', routing_key='cloudooo')
+                  queue=self._task_queue, routing_key=self._task_queue)
         print "Callback task sent."
 
     def _send_fail_callback_task(self):
