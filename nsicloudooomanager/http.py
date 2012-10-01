@@ -111,6 +111,7 @@ class HttpHandler(cyclone.web.RequestHandler):
     @cyclone.web.asynchronous
     def post(self):
         request_as_json = self._load_request_as_json()
+        expire = request_as_json.get('expire') or False
         callback_url = request_as_json.get('callback') or None
         callback_verb = request_as_json.get('verb') or 'POST'
         if not request_as_json.get('filename') and not request_as_json.get('doc_link'):
@@ -141,16 +142,18 @@ class HttpHandler(cyclone.web.RequestHandler):
             log.msg("POST failed!")
             log.msg("Either 'doc', 'sam_uid' or 'doc_link' weren't provided")
             raise cyclone.web.HTTPError(400, 'Malformed request.')
-        response = self._enqueue_uid_to_granulate(to_granulate_uid, filename, callback_url, callback_verb, doc_link)
+        response = self._enqueue_uid_to_granulate(to_granulate_uid, filename,
+                                                  callback_url, callback_verb, doc_link,
+                                                  expire)
         self.set_header('Content-Type', 'application/json')
         log.msg("Document sent to the granulation queue.")
         self.finish(cyclone.web.escape.json_encode({'doc_key':to_granulate_uid}))
 
-    def _enqueue_uid_to_granulate(self, uid, filename, callback_url, callback_verb, doc_link):
+    def _enqueue_uid_to_granulate(self, uid, filename, callback_url, callback_verb, doc_link, expire):
         try:
-            send_task('nsicloudooomanager.tasks.GranulateDoc', args=(self._task_queue, uid, filename, callback_url, 
-                                                                     callback_verb, doc_link, self.cloudooo_settings,
-                                                                     self.sam_settings),
+            send_task('nsicloudooomanager.tasks.GranulateDoc', args=(self._task_queue, uid, filename, callback_url,
+                                                                     callback_verb, doc_link, expire, 
+                                                                     self.cloudooo_settings, self.sam_settings),
                                                                queue=self._task_queue,
                                                                routing_key=self._task_queue)
         except:

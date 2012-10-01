@@ -24,9 +24,10 @@ class DocumentDownloadException(DocumentException):
 
 class GranulateDoc(Task):
 
-    def run(self, task_queue, uid, filename, callback_url, callback_verb, doc_link, cloudooo_settings, sam_settings):
+    def run(self, task_queue, uid, filename, callback_url, callback_verb, doc_link, expire, cloudooo_settings, sam_settings):
         self._logger = GranulateDoc.get_logger()
         self._callback_url = callback_url
+        self._expire = expire
         self._callback_verb = callback_verb.lower()
         self._cloudooo_settings = cloudooo_settings
         self._sam = Restfulie.at(sam_settings['url']).auth(*sam_settings['auth']).as_('application/json')
@@ -102,7 +103,7 @@ class GranulateDoc(Task):
         if hasattr(self, '_old_data'):
             new_doc.update(self._old_data)
         print new_doc['granulated']
-        self._sam.post(key=self._doc_uid, value=new_doc)
+        self._sam.post(key=self._doc_uid, value=new_doc, expire=self._expire)
 
     def _granulate_doc(self):
         doc = File(self._filename, decodestring(self._original_doc))
@@ -117,18 +118,18 @@ class GranulateDoc(Task):
             for image in grains['image_list']:
                 encoded_image = b64encode(image.getContent().getvalue())
                 image_row = {'file': encoded_image, 'filename': image.getId()}
-                image_key = self._sam.put(value=image_row).resource().key
+                image_key = self._sam.put(value=image_row, expire=self._expire).resource().key
                 grains_keys['images'].append(image_key)
         if grains.has_key('file_list'):
             for file_ in grains['file_list']:
                 encoded_file = b64encode(file_.getContent().getvalue())
                 file_row = {'file': encoded_file, 'filename': file_.getId()}
-                file_key = self._sam.put(value=file_row).resource().key
+                file_key = self._sam.put(value=file_row, expire=self._expire).resource().key
                 grains_keys['files'].append(file_key)
         if grains.has_key('thumbnail'):
             encoded_thumbnail = b64encode(grains['thumbnail'].getvalue())
             thumbnail_row = {'file': encoded_thumbnail}
-            thumbnail_key = self._sam.put(value=thumbnail_row).resource().key
+            thumbnail_key = self._sam.put(value=thumbnail_row, expire=self._expire).resource().key
             self._thumbnail_key = thumbnail_key
         print "Document granulated into %d image(s) and %d file(s)." % \
               (len(grains_keys['images']), len(grains_keys['files']))
