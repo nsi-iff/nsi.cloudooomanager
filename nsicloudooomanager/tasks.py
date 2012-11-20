@@ -97,13 +97,13 @@ class GranulateDoc(Task):
     def _process_doc(self):
         self._granulate_doc()
         new_doc = {
-                    'file': self._original_doc, 'granulated':True, 'grains_keys':self._grains_keys, 
+                    'file': self._original_doc, 'granulated':True, 'grains_keys':self._grains_keys,
                     'thumbnail_key':self._thumbnail_key
                   }
         if hasattr(self, '_old_data'):
             new_doc.update(self._old_data)
         print new_doc['granulated']
-        self._sam.post(key=self._doc_uid, value=new_doc, expire=self._expire)
+        self._sam.put(key=self._doc_uid, value=new_doc, expire=self._expire)
 
     def _granulate_doc(self):
         doc = File(self._filename, decodestring(self._original_doc))
@@ -118,18 +118,18 @@ class GranulateDoc(Task):
             for image in grains['image_list']:
                 encoded_image = b64encode(image.getContent().getvalue())
                 image_row = {'file': encoded_image, 'filename': image.getId()}
-                image_key = self._sam.put(value=image_row, expire=self._expire).resource().key
+                image_key = self._sam.post(value=image_row, expire=self._expire).resource().key
                 grains_keys['images'].append(image_key)
         if grains.has_key('file_list'):
             for file_ in grains['file_list']:
                 encoded_file = b64encode(file_.getContent().getvalue())
                 file_row = {'file': encoded_file, 'filename': file_.getId()}
-                file_key = self._sam.put(value=file_row, expire=self._expire).resource().key
+                file_key = self._sam.post(value=file_row, expire=self._expire).resource().key
                 grains_keys['files'].append(file_key)
         if grains.has_key('thumbnail'):
             encoded_thumbnail = b64encode(grains['thumbnail'].getvalue())
             thumbnail_row = {'file': encoded_thumbnail}
-            thumbnail_key = self._sam.put(value=thumbnail_row, expire=self._expire).resource().key
+            thumbnail_key = self._sam.post(value=thumbnail_row, expire=self._expire).resource().key
             self._thumbnail_key = thumbnail_key
         print "Document granulated into %d image(s) and %d file(s)." % \
               (len(grains_keys['images']), len(grains_keys['files']))
@@ -148,7 +148,7 @@ class Callback(Task):
         try:
             print "Sending callback to %s" % url
             restfulie = Restfulie.at(url).as_('application/json')
-            response = getattr(restfulie, verb.lower())(doc_key=doc_uid, grains_keys=grains_keys, 
+            response = getattr(restfulie, verb.lower())(doc_key=doc_uid, grains_keys=grains_keys,
                                                         thumbnail_key=thumbnail_key, done=True)
         except Exception, e:
             Callback.retry(exc=e, countdown=10)
