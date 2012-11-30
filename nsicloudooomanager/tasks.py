@@ -9,11 +9,13 @@ from restfulie import Restfulie
 from celery.task import Task
 from celery.execute import send_task
 
-from pickle import dumps
 from json import loads
+from tempfile import NamedTemporaryFile as TemporaryFile
+from xmlrpclib import Server
 
 from nsi.granulate.GranulateOffice import GranulateOffice
 from nsi.granulate.FileUtils import File
+from nsi.metadataextractor.extractor import TccExtractor, EventExtractor
 
 
 class DocumentException(Exception):
@@ -21,6 +23,37 @@ class DocumentException(Exception):
 
 class DocumentDownloadException(DocumentException):
     pass
+
+class ExtractMetadata(Task):
+
+    def run(self, task_queue, uid, document_type, callback_url, callback_verb, expire, cloudooo_settings, sam_settings):
+        print 'Metadata extraction started...'
+        self._sam = Restfulie.at(sam_settings['url']).auth(*sam_settings['auth']).as_('application/json')
+        cloudooo = Server("%s/RPC2" % cloudooo_settings['url'])
+
+        response = loads(self._sam.get(key=uid).body)
+        doc = response['data']['file']
+        filename = response['data']['filename']
+        if not filename.endswith('pdf'):
+            print "Converting document to pdf..."
+            doc = cloudooo.convertFile(doc, filename[-3:], 'pdf')
+
+        temp_doc = TemporaryFile(suffix=filename[:-3] + "pdf", delete=False)
+        print temp_doc.name, filename
+        temp_doc.write(decodestring(doc))
+        temp_doc.close()
+
+        extractor = {'tcc': TccExtractor, 'event': EventExtractor}
+        print "Extracting the metadata..."
+        metadata = extractor[document_type](temp_doc.name).all_metadata()
+        metadata_key = self._sam.post(value=metadata, expire=expire).resource().key
+        response['data']['metadata_key'] = metadata_key
+
+        self._sam.put(key=uid, value=response['data']).resource()
+        print "Metadata extraction complete."
+
+
+
 
 class GranulateDoc(Task):
 
