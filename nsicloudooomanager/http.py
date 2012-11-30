@@ -60,7 +60,14 @@ class HttpHandler(cyclone.web.RequestHandler):
     @cyclone.web.asynchronous
     def get(self):
         doc_key = self._load_request_as_json().get('doc_key')
-        if doc_key: # find the grains keys for the document at 'doc_key'
+        metadata = self._load_request_as_json().get('metadata')
+        if doc_key and metadata:
+            key = yield self._get_metadata_key(doc_key)
+            self.set_header('Content-Type', 'application/json')
+            log.msg("Found the metadata key for the document with key: %s" % doc_key)
+            self.finish(cyclone.web.escape.json_encode({'metadata_key':key}))
+            return
+        elif doc_key: # find the grains keys for the document at 'doc_key'
             keys = yield self._get_grains_keys(doc_key)
             self.set_header('Content-Type', 'application/json')
             log.msg("Found the grains keys for the document with key: %s" % doc_key)
@@ -94,6 +101,16 @@ class HttpHandler(cyclone.web.RequestHandler):
             log.msg('Document with key %s isnt done.' % uid)
             self.finish(cyclone.web.escape.json_encode({'done':False}))
 
+    def _get_metadata_key(self, doc_key):
+        response = self.sam.get(key=doc_key)
+        if response.code == '404':
+            log.msg("GET failed!")
+            log.msg("Couldn't find any value for the key: %s" % key)
+            raise cyclone.web.HTTPError(404, 'Key not found in SAM.')
+        sam_entry = loads(response.body)
+        metadata_key = sam_entry['data']['metadata_key']
+        return metadata_key
+
     def _get_grains_keys(self, doc_key):
         document_uid = doc_key
         response = self.sam.get(key=document_uid)
@@ -123,9 +140,29 @@ class HttpHandler(cyclone.web.RequestHandler):
 
         if request_as_json.get('doc'):
             doc = request_as_json.get('doc')
-            to_granulate_doc = {"file":doc}
+            filename = request_as_json.get('filename')
+            to_granulate_doc = {"file":doc, 'filename': filename}
             to_granulate_uid = yield self._pre_store_in_sam(to_granulate_doc)
             log.msg("Granulating a doc...")
+        # Metadata extraction
+        elif request_as_json.get('sam_uid') and request_as_json.get('metadata') and request_as_json.get('type'):
+            to_extract_metadata_uid = yield request_as_json.get('sam_uid')
+            document_type = request_as_json.get('type')
+            response = self.sam.get(key=to_extract_metadata_uid)
+            if response.code == '404':
+                log.msg("POST failed!")
+                log.msg("Couldn't find the key: %s" % to_granulate_uid)
+                raise cyclone.web.HTTPError(404, 'Key not found at SAM.')
+            elif loads(response.body).get('data').get('metadata_key'):
+                print "Metadata for document with key %s was already extracted." % to_extract_metadata_uid
+                self.finish(cyclone.web.escape.json_encode({'doc_key':to_extract_metadata_uid}))
+                return
+            self._enqueue_uid_to_metadata_extraction(to_extract_metadata_uid, document_type,
+                                                     callback_url, callback_verb, expire)
+            log.msg("Metadata extraction requested for document with key %s." % to_extract_metadata_uid)
+            self.finish(cyclone.web.escape.json_encode({'doc_key':to_extract_metadata_uid}))
+            return
+        # End of metadata extraction
         elif request_as_json.get('sam_uid'):
             to_granulate_uid = yield request_as_json.get('sam_uid')
             response = self.sam.get(key=to_granulate_uid)
@@ -161,6 +198,18 @@ class HttpHandler(cyclone.web.RequestHandler):
             log.msg("Couldn't conncet to the queue service.")
             raise cyclone.web.HTTPError(503, 'Queue service unavailable')
 
+    def _enqueue_uid_to_metadata_extraction(self, uid, document_type, callback_url, callback_verb, expire):
+        try:
+            send_task('nsicloudooomanager.tasks.ExtractMetadata', args=(self._task_queue, uid, document_type,
+                                                                     callback_url, callback_verb, expire, self.cloudooo_settings,
+                                                                     self.sam_settings),
+                                                               queue=self._task_queue,
+                                                               routing_key=self._task_queue)
+        except:
+            log.msg('POST failed!')
+            log.msg("Couldn't conncet to the queue service.")
+            raise cyclone.web.HTTPError(503, 'Queue service unavailable')
+
     def _pre_store_in_sam(self, doc):
         response = self.sam.post(value=doc)
         if response.code == '500':
@@ -175,5 +224,5 @@ class HttpHandler(cyclone.web.RequestHandler):
             log.msg("POST failed.")
             log.msg("SAM user and password didn't match.")
             raise cyclone.web.HTTPError(401, 'SAM user and password not match.')
-        return self.sam.put(value=doc).resource().key
+        return response.resource().key
 
