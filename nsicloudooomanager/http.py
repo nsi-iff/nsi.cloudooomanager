@@ -108,7 +108,7 @@ class HttpHandler(cyclone.web.RequestHandler):
             log.msg("Couldn't find any value for the key: %s" % key)
             raise cyclone.web.HTTPError(404, 'Key not found in SAM.')
         sam_entry = loads(response.body)
-        metadata_key = sam_entry['data']['metadata_key']
+        metadata_key = sam_entry['data'].get('metadata_key')
         return metadata_key
 
     def _get_grains_keys(self, doc_key):
