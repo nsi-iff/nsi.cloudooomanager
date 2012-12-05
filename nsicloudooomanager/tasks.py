@@ -50,9 +50,12 @@ class ExtractMetadata(Task):
         response['data']['metadata_key'] = metadata_key
 
         self._sam.put(key=uid, value=response['data']).resource()
-        print "Metadata extraction complete."
+        print "Metadata extraction complete. Sending callback task..."
 
-
+        send_task('nsicloudooomanager.tasks.MetadataCallback',
+                  args=(callback_url, callback_verb, uid, metadata_key),
+                  queue=task_queue, routing_key=task_queue)
+        print "Metadata callback task sent."
 
 
 class GranulateDoc(Task):
@@ -67,6 +70,7 @@ class GranulateDoc(Task):
         self._doc_uid = uid
         self._filename = filename
         self._task_queue = task_queue
+        self._thumbnail_key = None
         # self._thumbnail_key = None
         doc_is_granulated = False
 
@@ -183,6 +187,23 @@ class Callback(Task):
             restfulie = Restfulie.at(url).as_('application/json')
             response = getattr(restfulie, verb.lower())(doc_key=doc_uid, grains_keys=grains_keys,
                                                         thumbnail_key=thumbnail_key, done=True)
+        except Exception, e:
+            Callback.retry(exc=e, countdown=10)
+        else:
+            print "Callback executed."
+            print "Response code: %s" % response.code
+
+
+class MetadataCallback(Task):
+
+    max_retries = 3
+
+    def run(self, url, verb, doc_uid, metadata_key):
+        try:
+            print "Sending metadata callback to %s" % url
+            restfulie = Restfulie.at(url).as_('application/json')
+            response = getattr(restfulie, verb.lower())(doc_key=doc_uid, metadata_key=metadata_key,
+                                                        done=True)
         except Exception, e:
             Callback.retry(exc=e, countdown=10)
         else:
