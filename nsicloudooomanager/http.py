@@ -131,11 +131,12 @@ class HttpHandler(cyclone.web.RequestHandler):
         expire = request_as_json.get('expire') or False
         callback_url = request_as_json.get('callback') or None
         callback_verb = request_as_json.get('verb') or 'POST'
-        if not request_as_json.get('filename') and not request_as_json.get('doc_link'):
+        if not request_as_json.get('filename') and not request_as_json.get('doc_link') and not request_as_json.get('metadata'):
             log.msg("POST failed.")
             log.msg("Either filename or doc_link weren't provided.")
             raise cyclone.web.HTTPError(400, 'Malformed request.')
-        filename = request_as_json.get('filename') or urlsplit(request_as_json.get('doc_link')).path.split('/')[-1]
+        elif not request_as_json.get('metadata'):
+            filename = request_as_json.get('filename') or urlsplit(request_as_json.get('doc_link')).path.split('/')[-1]
         doc_link = None
 
         if request_as_json.get('doc'):
