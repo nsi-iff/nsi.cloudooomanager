@@ -5,7 +5,7 @@ version = '0.2.4'
 
 setup(name='nsi.cloudooomanager',
       version=version,
-      description="A package to intercept all calls to an CloudOOO Server.",
+      description="A package to intercept all calls to a CloudOOO Server.",
       long_description="""\
 """,
       classifiers=[], # Get strings from http://pypi.python.org/pypi?%3Aaction=list_classifiers
@@ -20,7 +20,8 @@ setup(name='nsi.cloudooomanager',
       install_requires=[
           # -*- Extra requirements: -*-
           'twisted',
-          'zope.interface'
+          'zope.interface',
+          'nsi.metadataextractor'
       ],
       entry_points="""
       # -*- Entry points: -*-
